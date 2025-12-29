@@ -1,50 +1,43 @@
 FROM ubuntu:22.04
 
-# ----------------------------------------------------
-# 1. Cài đặt môi trường
-# ----------------------------------------------------
+# 1. Cài đặt SSH và các công cụ cần thiết
 RUN apt-get update && apt-get install -y \
     openssh-server \
     curl \
+    wget \
     sudo \
     python3 \
-    net-tools \
-    iputils-ping \
     && mkdir /var/run/sshd
 
-# ----------------------------------------------------
-# 2. Tạo User 'trthaodev' (Pass: thaodev@)
-# ----------------------------------------------------
+# 2. Cài đặt Cloudflared (Tool kết nối của Cloudflare)
+RUN curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb && \
+    dpkg -i cloudflared.deb && \
+    rm cloudflared.deb
+
+# 3. Tạo User 'trthaodev' (Mật khẩu: thaodev@)
 RUN useradd -m trthaodev && \
     echo "trthaodev:thaodev@" | chpasswd && \
     adduser trthaodev sudo
 
-# Cấu hình SSH
+# 4. Cấu hình SSH
 RUN echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config && \
-    echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config && \
-    echo 'GatewayPorts yes' >> /etc/ssh/sshd_config
+    echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
 
-# ----------------------------------------------------
-# 3. Tạo Script khởi chạy Serveo
-# ----------------------------------------------------
+# 5. Tạo Script chạy tự động (All-in-one)
 RUN echo '#!/bin/bash' > /start.sh && \
-    echo 'echo "=== KHOI DONG SSH ==="' >> /start.sh && \
+    echo 'echo "=== KHOI DONG SSH SERVICE ==="' >> /start.sh && \
     echo 'service ssh start' >> /start.sh && \
-    echo 'echo "=== DANG KET NOI SERVEO.NET... ==="' >> /start.sh && \
-    echo '# Thu tao mot alias ngau nhien' >> /start.sh && \
-    echo '# Luu y: Serveo doi khi hay bi die do qua tai, hay kien nhan' >> /start.sh && \
-    echo 'nohup ssh -o StrictHostKeyChecking=no -R 0:localhost:22 serveo.net > /var/log/serveo.log 2>&1 &' >> /start.sh && \
-    echo 'echo "Dang cho lay dia chi..."' >> /start.sh && \
-    echo 'sleep 7' >> /start.sh && \
-    echo 'echo "=== THONG TIN KET NOI CUA BAN ==="' >> /start.sh && \
-    echo 'cat /var/log/serveo.log' >> /start.sh && \
-    echo 'echo "================================="' >> /start.sh && \
-    echo 'echo "Server dang chay..."' >> /start.sh && \
-    echo 'tail -f /var/log/serveo.log & python3 -m http.server 8080' >> /start.sh && \
+    echo 'if [ -z "$CLOUDFLARE_TOKEN" ]; then' >> /start.sh && \
+    echo '  echo "❌ LOI: Thieu bien moi truong CLOUDFLARE_TOKEN!"' >> /start.sh && \
+    echo 'else' >> /start.sh && \
+    echo '  echo "=== KET NOI CLOUDFLARE TUNNEL ==="' >> /start.sh && \
+    echo '  nohup cloudflared tunnel run --token $CLOUDFLARE_TOKEN > /var/log/cloudflared.log 2>&1 &' >> /start.sh && \
+    echo '  echo "✅ Cloudflare da chay. Hay ket noi qua domain ban da cau hinh."' >> /start.sh && \
+    echo 'fi' >> /start.sh && \
+    echo 'echo "=== GIU CONTAINER HOAT DONG (PORT 8080) ==="' >> /start.sh && \
+    echo 'python3 -m http.server 8080' >> /start.sh && \
     chmod +x /start.sh
 
-# ----------------------------------------------------
-# 4. Chạy
-# ----------------------------------------------------
+# 6. Mở Port và Chạy
 EXPOSE 8080 22
 CMD ["/start.sh"]
