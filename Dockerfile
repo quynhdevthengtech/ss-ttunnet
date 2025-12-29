@@ -1,51 +1,50 @@
 FROM ubuntu:22.04
 
-# -----------------------------
-# 1. Cài đặt các gói cần thiết
-# -----------------------------
-# Lưu ý: Thêm 'gnupg' để cài key cho Playit
-RUN apt update && apt install -y \
+# ----------------------------------------------------
+# 1. Cài đặt môi trường
+# ----------------------------------------------------
+RUN apt-get update && apt-get install -y \
     openssh-server \
     curl \
-    wget \
     sudo \
     python3 \
-    gnupg \
+    net-tools \
+    iputils-ping \
     && mkdir /var/run/sshd
 
-# -----------------------------
-# 2. Tạo user 'trthaodev'
-# -----------------------------
-# User: trthaodev / Pass: thaodev@
-RUN useradd -m trthaodev && echo "trthaodev:thaodev@" | chpasswd && adduser trthaodev sudo
+# ----------------------------------------------------
+# 2. Tạo User 'trthaodev' (Pass: thaodev@)
+# ----------------------------------------------------
+RUN useradd -m trthaodev && \
+    echo "trthaodev:thaodev@" | chpasswd && \
+    adduser trthaodev sudo
 
-# -----------------------------
-# 3. Cấu hình SSH
-# -----------------------------
+# Cấu hình SSH
 RUN echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config && \
     echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config && \
-    echo 'ClientAliveInterval 60' >> /etc/ssh/sshd_config
+    echo 'GatewayPorts yes' >> /etc/ssh/sshd_config
 
-# -----------------------------
-# 4. Cài đặt Playit.gg (Bản mới nhất)
-# -----------------------------
-RUN curl -SsL https://playit-cloud.github.io/ppa/key.gpg | gpg --dearmor | tee /etc/apt/trusted.gpg.d/playit.gpg >/dev/null && \
-    echo "deb [signed-by=/etc/apt/trusted.gpg.d/playit.gpg] https://playit-cloud.github.io/ppa/data ./" | tee /etc/apt/sources.list.d/playit-cloud.list && \
-    apt update && apt install -y playit
+# ----------------------------------------------------
+# 3. Tạo Script khởi chạy Serveo
+# ----------------------------------------------------
+RUN echo '#!/bin/bash' > /start.sh && \
+    echo 'echo "=== KHOI DONG SSH ==="' >> /start.sh && \
+    echo 'service ssh start' >> /start.sh && \
+    echo 'echo "=== DANG KET NOI SERVEO.NET... ==="' >> /start.sh && \
+    echo '# Thu tao mot alias ngau nhien' >> /start.sh && \
+    echo '# Luu y: Serveo doi khi hay bi die do qua tai, hay kien nhan' >> /start.sh && \
+    echo 'nohup ssh -o StrictHostKeyChecking=no -R 0:localhost:22 serveo.net > /var/log/serveo.log 2>&1 &' >> /start.sh && \
+    echo 'echo "Dang cho lay dia chi..."' >> /start.sh && \
+    echo 'sleep 7' >> /start.sh && \
+    echo 'echo "=== THONG TIN KET NOI CUA BAN ==="' >> /start.sh && \
+    echo 'cat /var/log/serveo.log' >> /start.sh && \
+    echo 'echo "================================="' >> /start.sh && \
+    echo 'echo "Server dang chay..."' >> /start.sh && \
+    echo 'tail -f /var/log/serveo.log & python3 -m http.server 8080' >> /start.sh && \
+    chmod +x /start.sh
 
-# -----------------------------
-# 5. Copy script khởi chạy
-# -----------------------------
-# Bạn nhớ tạo file start-playit.sh cùng thư mục với Dockerfile trước khi deploy
-COPY start-playit.sh /usr/local/bin/start-playit.sh
-RUN chmod +x /usr/local/bin/start-playit.sh
-
-# -----------------------------
-# 6. Mở port (Web để giữ container, SSH để kết nối nội bộ)
-# -----------------------------
+# ----------------------------------------------------
+# 4. Chạy
+# ----------------------------------------------------
 EXPOSE 8080 22
-
-# -----------------------------
-# 7. Chạy script
-# -----------------------------
-CMD ["/usr/local/bin/start-playit.sh"]
+CMD ["/start.sh"]
